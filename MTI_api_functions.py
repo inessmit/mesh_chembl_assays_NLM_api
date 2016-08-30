@@ -15,7 +15,7 @@ def get_assay_descriptions(engine, condition = None):
     """Connect to engine and gets all assay descriptions from ChEMBL to iterable for use in make_input_files function.
     kwargs: engine -- str, database engine e.g. sqlalchemy engine"""
     connection = engine.connect()
-    sql = "select assay_id, trim('.' from description) from chembl_21.assays where description is not null"
+    sql = "select assay_id, trim('.' from description) from chembl_21.assays where description is not null" # Need to remove trailing '.' from assay description, this causes ERROR on MTI server.
     if condition != None:
         sql = sql + ' and ' + condition
     result = engine.execute(sql).fetchall()
@@ -25,7 +25,7 @@ def get_assay_descriptions(engine, condition = None):
 
 # In[27]:
 
-def make_input_files(db_result, nr_assays = 4000, nr_files = 100, path_to_inputfiles = './inputfiles'): 
+def make_input_files(db_result, nr_assays = 4000, nr_files = 100, path_to_inputfiles): 
     """Create text files containing assay_ids and ChEMBL assay descriptions for use as input to Medical Text Indexer.
     Place the inputfiles in numbered directories within the provided directory.
     If no directory is given, create the directory 'inputfiles' if it does not exist yet and remove all existing contents before filling it.
@@ -68,44 +68,37 @@ def make_input_files(db_result, nr_assays = 4000, nr_files = 100, path_to_inputf
 
 # In[ ]:
 
-# Need to define paths
-# The scripts assume a path to the 'SKR_Web_API_V2_1' directory as downloaded from NCBI Medical Text Indexer website.
-# The 'SKR_Web_API_V2_1' directory needs to contain the run.sh file.
-# The 'examples' directory contains the java files (e.g. I have been using GenericBatchUser.java)
-
-# path_to_MTI_dir = '/nfs/research2/jpo/shared/projects/HeCaToS/mesh_api/SKR_Web_API_V2_1/'
-# path_to_files_dir = '/nfs/research2/jpo/shared/projects/HeCaToS/mesh_api/SKR_Web_API_V2_1/examples'
-
-
-# In[ ]:
-
-def submit_job_array_for_inputdir(inputfiles_dir, inputfiles_subdir, email, path_to_MTI_dir='/nfs/research2/jpo/shared/projects/HeCaToS/mesh_api/SKR_Web_API_V2_1', path_to_files_dir='/nfs/research2/jpo/shared/projects/HeCaToS/mesh_api/SKR_Web_API_V2_1/examples'):
-    """Submit a job array using bsub referring to the inputfiles in the given inputfiles directory to get the results from the Java-based Medical Text Indexer web services.
+def submit_job_array_for_inputdir(inputfiles_dir, inputfiles_subdir, email, path_to_MTI_dir, path_to_files_dir):
+    """Submit a job array using bsub referring to the inputfiles in the given inputfiles directory to get the results from the Java-based Medical Text Indexer web services. 
+    Make directories 'outputfiles' and 'errorfiles' if they do not yet exist.
     kwargs: path_to_MTI_dir -- str, full path to the directory with MTI files in it, as downloaded from them, called 'SKR_Web_API_V2_1'
             path_to_files_dir -- str, full path to the directory within the MTI directory in which the java files are stored, this is called 'examples' in the downloaded 'SKR_Web_API_V2_1' directory.
             inputfiles_dir -- str, name of the directory that contains the numbered subdirectories which in turn contain the inputfiles. Must be located within path_to_files_dir.
             inputfiles_subdir -- str, name of a specific subdirectory of the inputfiles directory (as defined under 'inputfiles_dir') for which you want to submit an array. 
             email -- str email address mandatory for using NLM API
     """
-    # This function expects a hierarchical file structure in which the parent directory 'SKR_Web_API_V2_1' contains the run.sh file.
-    # Within 'SKR_Web_API_V2_1' there should be a subdirectory with the java files for e.g. GenericBatchUser.java
-    # Within this subdirectory this function expects an 'inputfiles' directory that contains subdirectories with the inputfiles. There should be max. 1000 inputfiles in each subdirectory because this is the max size of an array for bsub.
-    # This function will make the directories 'outputfiles' and 'errorfiles' if they don't yet exist.
+    # This function expects a hierarchical file structure in which the parent directory 'SKR_Web_API_V2_1' contains the run.sh file. See the README.txt.
+    # Within 'SKR_Web_API_V2_1' there should be a subdirectory (this is called 'examples' in the SKR_Web_API_V2_1 directory) with the java files for e.g. GenericBatchUser.java.
+    # Within this subdirectory this function expects an 'inputfiles' directory that contains subdirectories with the inputfiles. 
+    # There should be max. 1000 inputfiles in each subdirectory because this is the max size of an array for bsub.
 
     inputfiles = [int(file.strip('.txt').strip('input')) for file in os.listdir(path_to_files_dir+'/'+inputfiles_dir+'/'+inputfiles_subdir) if 'input' in file]
-
+    
+    # Make 'outputfiles' and 'errorfiles' directories if not yet exist
     if not os.path.exists(path_to_files_dir+'/errorfiles/'+inputfiles_subdir):
         os.makedirs(path_to_files_dir+'/errorfiles/'+inputfiles_subdir)
     if not os.path.exists(path_to_files_dir+'/outputfiles/'+inputfiles_subdir):
         os.makedirs(path_to_files_dir+'/outputfiles/'+inputfiles_subdir)
 
+    # Prepare paths for the bash command
     errorfiles = path_to_files_dir+'/errorfiles/'+inputfiles_subdir+'/errors%J_%I'
     outputfiles = path_to_files_dir+'/outputfiles/'+inputfiles_subdir+'/output%I'
     script = path_to_MTI_dir+'/run.sh'
     inputfiles_spec = path_to_files_dir+'/'+inputfiles_dir+'/'+inputfiles_subdir+'/input\$LSB_JOBINDEX.txt'
     outputfiles_spec = path_to_files_dir+'/outputfiles/'+inputfiles_subdir+'/output\$LSB_JOBINDEX'
 
-    # In the command below, one job is run at a time. It was recommended by NLM MTI support to run max 2-3 jobs at a time, otherwise things slow down.
+    # Format and execute bash command
+    # In the command below, one job is run at a time. It was recommended to me by NLM MTI support to run max 2-3 jobs at a time, otherwise things slow down.
     command = 'bsub -J "myArray[{0}-{1}]%1" -e "'+errorfiles+'" -o "'+outputfiles+'" "'+script+' GenericBatchUser --email '+email+' --singleLinePMID '+inputfiles_spec+' > '+outputfiles_spec+'"'
     formatted_command = command.format(min(inputfiles), max(inputfiles), inputfiles_subdir)
     os.system(formatted_command)
@@ -113,17 +106,17 @@ def submit_job_array_for_inputdir(inputfiles_dir, inputfiles_subdir, email, path
 
 # In[ ]:
 
-def redo_failed_jobs(inputfiles_dir, inputfiles_subdir, email, path_to_files_dir='/nfs/research2/jpo/shared/projects/HeCaToS/mesh_api/SKR_Web_API_V2_1/examples', path_to_MTI_dir = '/nfs/research2/jpo/shared/projects/HeCaToS/mesh_api/SKR_Web_API_V2_1'):
-    """Detect which outputfiles in a subdirectory of outputfiles have failed (based on size of the file) and resubmit them in an array
+def redo_failed_jobs(inputfiles_dir, inputfiles_subdir, email, path_to_MTI_dir, path_to_files_dir):
+    """Detect which outputfiles in a subdirectory of outputfiles have failed (based on size of the outputfile) and resubmit them in an array
     kwargs: path_to_MTI_dir -- str, full path to the directory with MTI files in it, as downloaded from them, called 'SKR_Web_API_V2_1'
             path_to_files_dir -- str, full path to the directory within the MTI directory in which the java files are stored, this is called 'examples' in the downloaded 'SKR_Web_API_V2_1' directory.
             inputfiles_dir -- str, name of the directory that contains the numbered subdirectories which in turn contain the inputfiles. Must be located within path_to_files_dir.
             inputfiles_subdir -- str, name of a specific subdirectory of the inputfiles directory (as defined under 'inputfiles_dir') for which you want to redo failed jobs.
             email -- str email address mandatory for using NLM API
     """
-    
     logging.info('Starting to check missing files in {}'.format(inputfiles_subdir))
     
+    # Determine which outputfiles are too small. Small file size means the job failed as only some error report is printed in the file.
     missing_files = [file.strip('output') for file in os.listdir(path_to_files_dir+'/'+'outputfiles'+'/'+inputfiles_subdir) if os.path.getsize(path_to_files_dir+'/'+'outputfiles'+'/'+inputfiles_subdir+'/'+file) < 20000]
     missing_files_formatted = ','.join(missing_files)
     
@@ -132,13 +125,15 @@ def redo_failed_jobs(inputfiles_dir, inputfiles_subdir, email, path_to_files_dir
         return
     else:
         logging.info('Missing file(s) detected, starting to rerun missing files for {}'.format(inputfiles_subdir))
-        
+    
+    # Prepare paths for the bash command
     errorfiles = path_to_files_dir+'/errorfiles/{1}/errors%J_%I'
     outputfiles = path_to_files_dir+'/outputfiles/{1}/output%I'
     script = path_to_MTI_dir+'/run.sh'
     inputfiles_spec = path_to_files_dir+'/'+inputfiles_dir+'/{1}/input\$LSB_JOBINDEX.txt'
     outputfiles_spec = path_to_files_dir+'/outputfiles/{1}/output\$LSB_JOBINDEX'
 
+    # Format and execute bash command
     command = 'bsub -J "myArray[{0}]%1" -e "'+errorfiles+'" -o "'+outputfiles+'" "'+script+' GenericBatchUser --email '+email+' --singleLinePMID '+inputfiles_spec+' > '+outputfiles_spec+'"'
     formatted_command = command.format(missing_files_formatted, inputfiles_subdir)
     os.system(formatted_command)
@@ -195,16 +190,20 @@ def insert_results_into_oracle(engine, annotation_table, outputfiles_path):
         
         with open(outputfiles_path+'/'+outputfile, 'r') as f:
             result = f.readlines()
-
+        
+        # Extract data from each line in the outputfile
         for line in result:
-
+            
+            # If no terms are suggested, all fields are empty so a sequence of pipes is printed. Insert this in the Oracle table to keep a record.
             if '||||' in line:
                 assay_id = line.split('"')[1]
                 sql = '''insert into {}(assay_id, descriptor_ui, comments) values({}, 'not applicable', 'no terms suggested')'''.format(annotation_table, assay_id)
                 engine.execute(sql)
                 continue
-
+            
+            # For lines with output:
             else:
+                # Get text from each field in pipe-separated line
                 try:
                     fields = line.split('|')
 
@@ -216,24 +215,24 @@ def insert_results_into_oracle(engine, annotation_table, outputfiles_path):
                         term_type = fields[4].replace("'", "''")
                         misc = fields[5].replace("'", "''")
                         paths = fields[7].replace("'", "''")
-                        descriptor_ui = fields[8].strip('\n') # haven't tested the stripping here
-
-                        sql = """insert into {}(assay_id, descriptor_ui, descriptor_text, umls_id, score, term_type, misc, paths) 
-                        values({}, '{}', '{}', '{}', {}, '{}', '{}', '{}')""".format(annotation_table, assay_id, descriptor_ui, descriptor_text, umls_id, score, term_type, misc, paths)
-
-                        engine.execute(sql)
+                        descriptor_ui = fields[8].strip('\n')
 
                     except IndexError:
-                        logging.info('Problem at assay_id {}: Did not extract the fields correctly'.format(assay_id))
+                        logging.info('IndexError at assay_id {} while extracting the fields based on the | separator'.format(assay_id))
                         next
+                    
+                    # Insert results into db
+                    sql = """insert into {}(assay_id, descriptor_ui, descriptor_text, umls_id, score, term_type, misc, paths) 
+                        values({}, '{}', '{}', '{}', {}, '{}', '{}', '{}')""".format(annotation_table, assay_id, descriptor_ui, descriptor_text, umls_id, score, term_type, misc, paths)
+                    engine.execute(sql)
 
                 except ValueError:
                     # This exception happens when '|' is not in the line. This happens at the end of the outputfile where there are some lines reporting on the lsf job. These lines can be ignored. 
                     # However, it also happens when 'ERROR' is returned by the API instead of the data, which happened randomly throughout the files.
-                    # These lines had 'ERROR' returned on the line (no assay_id on the line) and upon checking the set of assay_ids some were missing.
-                    # These missing should be rerun and inserted. (have no function for that)
+                    # I could not figure out why this happened but upon trying the missing assay_ids again, they worked file.
+                    # Compare the output assay_ids to the input assay_ids to see if any are missing (I have not written a function for that)
                     if 'ERROR' in line:
-                        logging.info("Problem at this line, contains the string 'ERROR'. Check assay_ids against the input files (or original sql statement) to check if any assay_ids are missing.")
+                        logging.info("Problem at this line, contains the string 'ERROR'. Check assay_ids against the input files to check if any assay_ids are missing.")
                     next
 
         logging.info('finished with file ' + outputfile)
