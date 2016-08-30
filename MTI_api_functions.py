@@ -9,19 +9,6 @@ import itertools
 import logging
 
 
-# Notes README
-# * file hierarchy
-# * talk about changes I made in the java files
-# * take note of command/options used, as well as need for umls license and password insert into GenericBatchUser file.
-# * explain about the failing jobs and errors
-# 
-# * example script
-
-# In[ ]:
-
-
-
-
 # In[14]:
 
 def get_assay_descriptions(engine, condition = None):
@@ -46,7 +33,7 @@ def make_input_files(db_result, nr_assays = 4000, nr_files = 100, path_to_inputf
         nr_assays -- int, number of assays (rows) to be put in one text file
         nr_files -- int, number of inputfiles to be put in one numbered subdirectory of the inputfiles directory"""
 
-    # The number 4000 is arbitary, there are no limits from the NLM API side, apart from the note that it's more efficient to submit many lines per file than few. 
+    # The number 4000 is arbitary, there are no published limits from the NLM API side, apart from the advice that it's more efficient to submit many lines per file than few. 
     
     def grouper(n, iterable):
         it = iter(iterable)
@@ -56,12 +43,13 @@ def make_input_files(db_result, nr_assays = 4000, nr_files = 100, path_to_inputf
                 return
             yield chunk
 
-    #create inputfiles directory, empty old contents
+    # Create inputfiles directory and remove old contents if there were any
+    
     if not os.path.exists(path_to_inputfiles):
         os.makedirs(path_to_inputfiles)
-    os.system('rm -rf ./inputfiles/*')
+    os.system('rm -rf {}/*'.format(path_to_inputfiles))
         
-    # create inputfiles
+    # Create inputfiles
     filenumber = 0
     for chunk in grouper(nr_assays, db_result):
         filenumber += 1
@@ -124,8 +112,6 @@ def submit_job_array_for_inputdir(inputfiles_dir, inputfiles_subdir, email, path
 
 
 # In[ ]:
-
-# I haven't tested this function
 
 def redo_failed_jobs(inputfiles_dir, inputfiles_subdir, email, path_to_files_dir='/nfs/research2/jpo/shared/projects/HeCaToS/mesh_api/SKR_Web_API_V2_1/examples', path_to_MTI_dir = '/nfs/research2/jpo/shared/projects/HeCaToS/mesh_api/SKR_Web_API_V2_1'):
     """Detect which outputfiles in a subdirectory of outputfiles have failed (based on size of the file) and resubmit them in an array
@@ -242,8 +228,10 @@ def insert_results_into_oracle(engine, annotation_table, outputfiles_path):
                         next
 
                 except ValueError:
-                    # This exception happens when '|' is not in the line. This happens at the end of the outputfile where there are some lines reporting on the lsf job.
-                    # These lines can be ignored. However, there were some cases I got 'ERROR' returned on the line (no assay_id on the line) and these seemed to correspond to missing assay_ids.
+                    # This exception happens when '|' is not in the line. This happens at the end of the outputfile where there are some lines reporting on the lsf job. These lines can be ignored. 
+                    # However, it also happens when 'ERROR' is returned by the API instead of the data, which happened randomly throughout the files.
+                    # These lines had 'ERROR' returned on the line (no assay_id on the line) and upon checking the set of assay_ids some were missing.
+                    # These missing should be rerun and inserted. (have no function for that)
                     if 'ERROR' in line:
                         logging.info("Problem at this line, contains the string 'ERROR'. Check assay_ids against the input files (or original sql statement) to check if any assay_ids are missing.")
                     next
@@ -264,9 +252,4 @@ def create_indexes(engine, annotation_table):
     engine.execute("CREATE INDEX test_idx ON {}(assay_id, descriptor_ui, descriptor_text)".format(annotation_table))
 
     logging.info('Indexes on table {} created'.format(annotation_table))
-
-
-# In[ ]:
-
-
 

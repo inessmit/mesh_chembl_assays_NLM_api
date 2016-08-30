@@ -4,12 +4,28 @@ To use the API, you need to download the directory from https://ii.nlm.nih.gov/M
 This requires a UMLS Terminology Services license (this is free) which you can get here: https://uts.nlm.nih.gov//license.html
 Publications on the MTI: https://ii.nlm.nih.gov/Publications/index.shtml#MTI
 
+The file hierarchy expected is as follows:
+SKR_Web_API_V2_1/
+    run.sh
+    examples/
+        GenericBatchUser.java
+        logs/
+        inputfiles/
+            0001/
+                input1.txt
+                input2.txt
+                input3.txt
+            0002/
+                input4.txt
+                input5.txt
+                input5.txt
+    
 In order to submit the jobs to the NLM API I used the GenericBatchUser.java file from the examples directory provided.
 One change to this script needs to be made on line 140, changing 'singleLineDelimitedInput = true' to 'singleLineDelimitedInputWithId = true'.
 
 See the example notebooks A, B and C on how to use the functions in the MTI_api_functions.py module.
 
-Also the environment needs to have a working version of Java, specify a path to this java in the run.sh file in the NLM examples directory.
+Also the environment needs to have a working version of Java, specify a path to this java in the run.sh file in the SKR_Web_API_V2_1 directory.
 For the EBI cluster I used java from here /nfs/research2/software/prefix/usr/bin/java
 
 The conda environment I used is as follows, using python 3.4:
