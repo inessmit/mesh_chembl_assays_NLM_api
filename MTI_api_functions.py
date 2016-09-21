@@ -23,9 +23,9 @@ def get_assay_descriptions(engine, condition = None):
     return(result)
 
 
-# In[27]:
+# In[3]:
 
-def make_input_files(db_result, nr_assays = 4000, nr_files = 100, path_to_inputfiles): 
+def make_input_files(path_to_inputfiles, db_result, nr_assays = 4000, nr_files = 100): 
     """Create text files containing assay_ids and ChEMBL assay descriptions for use as input to Medical Text Indexer.
     Place the inputfiles in numbered directories within the provided directory.
     If no directory is given, create the directory 'inputfiles' if it does not exist yet and remove all existing contents before filling it.
@@ -62,7 +62,9 @@ def make_input_files(db_result, nr_assays = 4000, nr_files = 100, path_to_inputf
     
         file = open(filepath, 'w')
         for item in chunk:
-            file.write('"'+str(item[0])+'"|'+item[1].replace('prostrate', 'prostate').replace('Prostrate', 'Prostate')+'\n') # typo in ChEMBL_21
+            
+            file.write('"'+str(item[0])+'"|'+item[1].replace('prostrate', 'prostate').replace('Prostrate', 'Prostate')+'\n') # typo in ChEMBL_21 and ChEMBL_22. Should be fixed in 23... 
+        
         file.close()
 
 
@@ -246,9 +248,14 @@ def create_indexes(engine, annotation_table):
     kwargs: engine -- str, database engine e.g. sqlalchemy engine
             annotation_table -- str, name of the table for storing the pmid together with ids for descriptors and qualifiers"""
     
-    engine.execute("CREATE INDEX test_dui ON {}(descriptor_ui)".format(annotation_table))
-    engine.execute("CREATE INDEX test_dtext ON {}(descriptor_text)".format(annotation_table))
-    engine.execute("CREATE INDEX test_idx ON {}(assay_id, descriptor_ui, descriptor_text)".format(annotation_table))
+    engine.execute("CREATE INDEX {0}_dui ON {0}(descriptor_ui)".format(annotation_table))
+    engine.execute("CREATE INDEX {0}_dtext ON {0}(descriptor_text)".format(annotation_table))
+    engine.execute("CREATE INDEX {0}_idx ON {0}(assay_id, descriptor_ui, descriptor_text)".format(annotation_table))
 
     logging.info('Indexes on table {} created'.format(annotation_table))
+
+
+# In[ ]:
+
+
 
